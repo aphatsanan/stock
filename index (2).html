@@ -265,7 +265,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
 
 <script>
-const DEFAULT_API='https://script.google.com/macros/s/AKfycbxwHYjdQY0r3q29NYHHW0QFlMq7R-tuRX8uymXyYovortJ-y4TFCV7S_meiraKO0b-Z/exec';
+const DEFAULT_API='https://script.google.com/macros/s/AKfycbwPTSl-GZbuG9oQweWGbEHOC_Wc43yDOzsi7pleDS8WPOpEtj4LkOf_FrD75I7bbvYM/exec';
 let API=localStorage.getItem('sapi3')||DEFAULT_API,products=[],warehouses=[],suppliers=[],log=JSON.parse(localStorage.getItem('slog4')||'[]'),undoStack=[],undoTimer=null,curDetail=null,curTransferProduct=null;
 
 function init(){
@@ -581,12 +581,27 @@ function buildFifo(f){
 function closeDetail(){document.getElementById('detail-overlay').classList.remove('show');curDetail=null;}
 
 // ── TRANSFER ────────────────────────────────────────────────
-function openTransfer(pid){
+async function openTransfer(pid){
   const p=products.find(x=>String(x.id)===String(pid));if(!p)return;
   curTransferProduct=p;
   document.getElementById('transfer-product-name').textContent=`${p.id} — ${p.name}`;
   const fromSel=document.getElementById('tf-from'),toSel=document.getElementById('tf-to');
-  const opts=warehouses.length?warehouses:['คลัง A','คลัง B'];
+  // โหลด warehouses ใหม่ถ้ายังไม่มี
+  let opts=warehouses;
+  if(!opts||!opts.length){
+    try{
+      const wd=await apiFetch({action:'listWH'});
+      if(wd.status==='ok'){warehouses=wd.warehouses;opts=wd.warehouses;}
+    }catch{}
+  }
+  // ถ้ายังไม่มี ใช้คลังของสินค้านี้โดยตรง
+  if(!opts||!opts.length){
+    try{
+      const whd=await apiFetch({action:'getWH',product_id:pid});
+      if(whd.status==='ok') opts=whd.data.map(w=>w.warehouse);
+    }catch{}
+  }
+  if(!opts||!opts.length) opts=['คลัง 308','คลัง 312','คลัง 407'];
   fromSel.innerHTML=opts.map(w=>`<option value="${w}">${w}</option>`).join('');
   toSel.innerHTML=opts.map(w=>`<option value="${w}">${w}</option>`).join('');
   document.getElementById('tf-qty').value='';

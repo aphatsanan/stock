@@ -370,11 +370,10 @@ body{
 
 <script>
 // ===== ใส่ URL Apps Script ตรงนี้ =====
-const API='https://script.google.com/macros/s/AKfycbzMvycVkpYCbSy8zd0AdCEWDr76Oc2HPFOJ4st4FTMNqixYXwlUjOZrEg0qajVR2SFM/exec';
+const API='https://script.google.com/macros/s/AKfycbxk7x5aRP5NOC9TPzgh8HlOBjivVfSEKl1otXUmYNLsl_eyBU0GU1FmarKP1U_D1VCT/exec';
 
 let products=[];
 let searchTimer=null;
-const PAGE=100;
 
 function apiFetch(p){
   return new Promise((resolve,reject)=>{
@@ -390,32 +389,37 @@ function apiFetch(p){
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
+  document.getElementById('loading').textContent='⏳ กำลังโหลดสินค้า... รอสักครู่';
   document.getElementById('grid').innerHTML='';
   try{
     let all=[],offset=0;
-    while(true){
-      const d=await apiFetch({action:'getProducts',limit:PAGE,offset});
-      if(d.status==='ok'&&d.data.length){
+    let round=0;
+    while(round<20){
+      round++;
+      document.getElementById('loading').textContent=`⏳ กำลังโหลด... (${all.length} รายการ)`;
+      const d=await apiFetch({action:'getProducts',limit:50,offset});
+      if(d.status==='ok'&&d.data&&d.data.length){
         all=[...all,...d.data];
         if(!d.has_more)break;
-        offset+=PAGE;
+        offset+=50;
       }else break;
     }
     products=all;
     renderGrid(products);
     updateStats(products);
   }catch(e){
-    document.getElementById('loading').textContent='❌ โหลดไม่ได้ กรุณาลองใหม่';
+    document.getElementById('loading').textContent='❌ โหลดไม่ได้ กด "อัปเดตราคา" อีกครั้ง';
+    console.error(e);
+    return;
   }
   document.getElementById('loading').style.display='none';
 }
 
 function updateStats(list){
-  const hasShowPromo = list.some(p => p.show_promo !== undefined && p.show_promo !== '');
-  const shown = hasShowPromo ? list.filter(p => String(p.show_promo) === '1') : list;
-  const featured = shown.filter(p => p.promo_badge && String(p.promo_badge).trim());
-  document.getElementById('s-total').textContent=shown.length;
-  document.getElementById('s-promo').textContent=featured.length;
+  const featured=list.filter(p=>p.promo_badge&&String(p.promo_badge).trim());
+  const promo=list.filter(p=>String(p.show_promo)==='1');
+  document.getElementById('s-total').textContent=list.length;
+  document.getElementById('s-promo').textContent=featured.length||promo.length;
 }
 
 function iSrc(p){
@@ -436,18 +440,15 @@ function calcSave(promo,retail){
 }
 
 function renderGrid(list){
-  // กรองเฉพาะสินค้าที่ show_promo = 1 (ถ้ามีคอลัมน์นี้)
-  const hasShowPromo = list.some(p => p.show_promo !== undefined && p.show_promo !== '');
-  const filtered = hasShowPromo ? list.filter(p => String(p.show_promo) === '1') : list;
-
   const g=document.getElementById('grid'),e=document.getElementById('empty');
-  if(!filtered.length){g.innerHTML='';e.style.display='block';return;}
+  if(!list.length){g.innerHTML='';e.style.display='block';return;}
   e.style.display='none';
 
-  // เรียงให้สินค้า promo_badge ขึ้นก่อน
-  const sorted=[...filtered].sort((a,b)=>{
-    const ab=a.promo_badge?1:0, bb=b.promo_badge?1:0;
-    return bb-ab;
+  // เรียง: promo_badge ก่อน → show_promo=1 → ที่เหลือ
+  const sorted=[...list].sort((a,b)=>{
+    const av=(a.promo_badge&&String(a.promo_badge).trim())?2:(String(a.show_promo)==='1'?1:0);
+    const bv=(b.promo_badge&&String(b.promo_badge).trim())?2:(String(b.show_promo)==='1'?1:0);
+    return bv-av;
   });
 
   g.innerHTML=sorted.map(p=>{
@@ -457,17 +458,10 @@ function renderGrid(list){
     const hasPromo=p.price_promo&&Number(p.price_promo)>0;
     const save=calcSave(p.price_promo,p.price_retail);
 
-    // ป้ายพิเศษ promo_badge มาก่อน ถ้าไม่มีค่อยใช้ 🔥 โปร
-    const badgeText = p.promo_badge && String(p.promo_badge).trim() ? String(p.promo_badge).trim() : (hasPromo ? '🔥 โปร' : null);
-    const badgeStyle = p.promo_badge && String(p.promo_badge).trim()
-      ? 'background:linear-gradient(135deg,#c8472a,#e8a020);font-size:12px;padding:5px 12px;box-shadow:0 2px 10px rgba(200,70,42,.5)'
-      : '';
-    const badge = badgeText ? `<div class="promo-badge" style="${badgeStyle}">${badgeText}</div>` : '';
-
-    // ขอบการ์ดพิเศษถ้ามี promo_badge
-    const cardStyle = p.promo_badge && String(p.promo_badge).trim()
-      ? 'border:2px solid var(--accent);box-shadow:0 4px 20px rgba(200,70,42,.15)'
-      : '';
+    const badgeText=p.promo_badge&&String(p.promo_badge).trim()?String(p.promo_badge).trim():(hasPromo?'🔥 โปร':null);
+    const badgeStyle=p.promo_badge&&String(p.promo_badge).trim()?'background:linear-gradient(135deg,#c8472a,#e8a020);font-size:12px;padding:5px 12px;box-shadow:0 2px 10px rgba(200,70,42,.5)':'';
+    const badge=badgeText?`<div class="promo-badge" style="${badgeStyle}">${badgeText}</div>`:'';
+    const cardStyle=p.promo_badge&&String(p.promo_badge).trim()?'border:2px solid var(--accent);box-shadow:0 4px 20px rgba(200,70,42,.15)':String(p.show_promo)==='1'?'border:2px solid var(--accent2)':'';
 
     const priceHtml=hasPromo
       ?`<div class="price-promo">฿${fmt(p.price_promo)}</div>${p.price_retail&&Number(p.price_retail)>0?`<div class="price-retail-old">ปกติ ฿${fmt(p.price_retail)}</div>`:''}${save?`<div class="price-save">ประหยัด ${save}%</div>`:''}`
@@ -504,7 +498,6 @@ function openDetail(id){
   document.getElementById('d-name').textContent=p.name;
   document.getElementById('d-unit').textContent=`รหัส: ${p.id} | หน่วย: ${p.unit||'-'}`;
 
-  // ราคาโปรโมชั่น
   const hasPromo=p.price_promo&&Number(p.price_promo)>0;
   const save=calcSave(p.price_promo,p.price_retail);
   if(hasPromo){
@@ -527,7 +520,6 @@ function openDetail(id){
   document.getElementById('d-desc-area').innerHTML=p.description?`<div class="d-sec"><div class="d-sec-title">รายละเอียด</div><div class="d-desc">${p.description}</div></div>`:'';
   document.getElementById('d-hl-area').innerHTML=p.highlight?`<div class="d-sec"><div class="d-sec-title">✨ ไฮไลท์</div><div class="d-hl">${p.highlight}</div></div>`:'';
 
-  // ราคาอื่นๆ
   const prices=[];
   if(p.price_credit&&Number(p.price_credit)>0) prices.push({l:'ราคาเครดิต',v:'฿'+fmt(p.price_credit)});
   if(p.price_machine_retail&&Number(p.price_machine_retail)>0) prices.push({l:'ราคาเครื่อง (ปลีก)',v:'฿'+fmt(p.price_machine_retail)});

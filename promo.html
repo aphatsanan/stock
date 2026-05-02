@@ -390,22 +390,28 @@ function apiFetch(p){
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
+  document.getElementById('loading').textContent='⏳ กำลังโหลดสินค้า... รอสักครู่';
   document.getElementById('grid').innerHTML='';
   try{
     let all=[],offset=0;
-    while(true){
-      const d=await apiFetch({action:'getProducts',limit:PAGE,offset});
-      if(d.status==='ok'&&d.data.length){
+    let round=0;
+    while(round<20){
+      round++;
+      document.getElementById('loading').textContent=`⏳ กำลังโหลด... (${all.length} รายการ)`;
+      const d=await apiFetch({action:'getProducts',limit:50,offset});
+      if(d.status==='ok'&&d.data&&d.data.length){
         all=[...all,...d.data];
         if(!d.has_more)break;
-        offset+=PAGE;
+        offset+=50;
       }else break;
     }
     products=all;
     renderGrid(products);
     updateStats(products);
   }catch(e){
-    document.getElementById('loading').textContent='❌ โหลดไม่ได้ กรุณาลองใหม่';
+    document.getElementById('loading').textContent='❌ โหลดไม่ได้ กด "อัปเดตราคา" อีกครั้ง';
+    console.error(e);
+    return;
   }
   document.getElementById('loading').style.display='none';
 }
